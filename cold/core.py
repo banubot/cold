@@ -313,15 +313,6 @@ def _decode_gpu(args):
             ' pos=' + str(pos[m].squeeze()) + 
             ' scales=' + str(scl[m].squeeze()))
 
-    """
-    full_sim_stack = jnp.asarray(full_sim_stack)
-    full_data = jnp.asarray(full_data)
-    full_mrange = jnp.asarray(full_ranges)
-    """
-
-    """
-    cp
-    """
     cp.cuda.Device(0).use()
     full_sim_stack = cp.array(full_sim_stack)
     full_data = cp.array(full_data)
@@ -330,7 +321,6 @@ def _decode_gpu(args):
 
     print('data moved...')
 
-    #full_costs = cost_calc_all(full_sim_stack, full_data, algo['pos']['regpar'], full_mrange, pos)
     full_costs = cp.asnumpy(cupy_cost_calc_all(full_sim_stack, full_data, algo['pos']['regpar'], full_mrange, pos))
 
     for i in range(data.shape[0]):
@@ -339,16 +329,22 @@ def _decode_gpu(args):
 
     return pos, sig
 
+
 def cupy_cost_calc_all(full_sim_stack, full_data, regpar, full_mrange, pos):
-    full_data = cp.resize(full_data, full_sim_stack.shape)
     pos_base_shape = pos.shape
+
+    full_data = cp.resize(full_data, full_sim_stack.shape)
+    op_1 = cp.sum(cp.power(full_sim_stack - full_data, 2), axis=2) 
+    del full_data # Free GPU memory
+    del full_sim_stack
+
     pos = cp.resize(pos, full_mrange.shape + pos_base_shape)
     full_mrange = cp.tile(cp.expand_dims(full_mrange, axis=2).T, (full_sim_stack.shape[0],) + (1, 1))
+    op_2 = regpar * cp.sum(cp.power(full_mrange - pos, 2), axis=2)
+    del full_mrange
+    del pos
 
-    costs = (cp.sum(cp.power(full_sim_stack - full_data, 2), axis=2) +
-            (regpar * cp.sum(cp.power(full_mrange - pos, 2), axis=2)))
-
-    return costs
+    return op_1 + op_2
 
 @jax.jit
 def jax_recon(sim_slice, data, regpar, m, pos):
