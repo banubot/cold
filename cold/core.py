@@ -14,6 +14,7 @@ warnings.filterwarnings('ignore')
 
 import jax.numpy as jnp
 import jax
+import cupy as cp
 
 __author__ = "Doga Gursoy"
 __copyright__ = "Copyright (c) 2021, UChicago Argonne, LLC."
@@ -312,13 +313,25 @@ def _decode_gpu(args):
             ' pos=' + str(pos[m].squeeze()) + 
             ' scales=' + str(scl[m].squeeze()))
 
+    """
     full_sim_stack = jnp.asarray(full_sim_stack)
     full_data = jnp.asarray(full_data)
     full_mrange = jnp.asarray(full_ranges)
+    """
+
+    """
+    cp
+    """
+    cp.cuda.Device(0).use()
+    full_sim_stack = cp.array(full_sim_stack)
+    full_data = cp.array(full_data)
+    full_mrange = cp.array(full_ranges)
+    pos = cp.array(pos)
 
     print('data moved...')
 
-    full_costs = cost_calc_all(full_sim_stack, full_data, algo['pos']['regpar'], full_mrange, pos)
+    #full_costs = cost_calc_all(full_sim_stack, full_data, algo['pos']['regpar'], full_mrange, pos)
+    full_costs = cp.asnumpy(cupy_cost_calc_all(full_sim_stack, full_data, algo['pos']['regpar'], full_mrange, pos))
 
     for i in range(data.shape[0]):
         pos[i] = np.where(full_costs[i].min() == full_costs[i])[0][0]
@@ -326,6 +339,16 @@ def _decode_gpu(args):
 
     return pos, sig
 
+def cupy_cost_calc_all(full_sim_stack, full_data, regpar, full_mrange, pos):
+    full_data = cp.resize(full_data, full_sim_stack.shape)
+    pos_base_shape = pos.shape
+    pos = cp.resize(pos, full_mrange.shape + pos_base_shape)
+    full_mrange = cp.tile(cp.expand_dims(full_mrange, axis=2).T, (full_sim_stack.shape[0],) + (1, 1))
+
+    costs = (cp.sum(cp.power(full_sim_stack - full_data, 2), axis=2) +
+            (regpar * cp.sum(cp.power(full_mrange - pos, 2), axis=2)))
+
+    return costs
 
 @jax.jit
 def jax_recon(sim_slice, data, regpar, m, pos):
