@@ -20,7 +20,7 @@ __docformat__ = 'restructuredtext en'
 
 
 
-def decode(data, ind, comp, geo, algo, pos=None, debug=False):
+def decode(data, ind, comp, geo, algo, pos=None, debug=False, use_gpu=False):
     """Decodes the position and pixel footprints and their positions
     on the mask using coded measurement data."""
 
